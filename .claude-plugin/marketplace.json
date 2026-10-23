@@ -1,0 +1,17 @@
+{
+  "name": "coaching-kit",
+  "description": "Endurance coaching tools for intervals.icu",
+  "owner": {
+    "name": "eldafito",
+    "url": "https://github.com/eldafito"
+  },
+  "plugins": [
+    {
+      "name": "coaching-kit",
+      "source": "./",
+      "description": "Endurance coaching assistant for intervals.icu: athlete onboarding, weekly review and planning, workout generation with parser-safe descriptions.",
+      "category": "productivity",
+      "tags": ["coaching", "endurance", "intervals.icu"]
+    }
+  ]
+}

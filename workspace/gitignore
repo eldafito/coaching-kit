@@ -1,0 +1,13 @@
+# Credentials
+*.env
+coach-credentials.env
+
+# Local Claude Code settings (saved permissions can contain secrets)
+.claude/settings.local.json
+
+# API data cache (regenerable with `coach sync`)
+**/data-snapshots/
+
+# OS
+.DS_Store
+Thumbs.db

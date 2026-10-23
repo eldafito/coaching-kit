@@ -1,0 +1,25 @@
+# This repository is public: it must never contain athlete data or credentials.
+
+# Credentials
+*.env
+!*.env.example
+.claude/settings.local.json
+
+# Coach workspaces must not live here
+/athletes/
+**/data-snapshots/
+coach-preferences.md
+!/workspace/coach-preferences.md
+
+# Gradle / Kotlin / IntelliJ
+.gradle/
+build/
+.kotlin/
+*.iml
+.idea/
+out/
+local.properties
+
+# OS
+.DS_Store
+Thumbs.db

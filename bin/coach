@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Launcher for the coaching-kit CLI. Claude Code puts this plugin's bin/ on PATH,
+# so `coach <command>` works from anywhere inside the coach's workspace.
+# The Kotlin CLI is built on first use (and rebuilt when its sources change).
+set -euo pipefail
+
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CLI_DIR="$PLUGIN_ROOT/cli"
+LAUNCHER="$CLI_DIR/build/install/coach/bin/coach"
+
+needs_build() {
+  [[ ! -x "$LAUNCHER" ]] && return 0
+  [[ -n "$(find "$CLI_DIR/src" "$CLI_DIR/build.gradle.kts" -newer "$LAUNCHER" -print -quit)" ]]
+}
+
+if needs_build; then
+  if ! command -v java >/dev/null 2>&1; then
+    echo "coach: Java 17+ is required (install a JDK, e.g. 'brew install openjdk@21')." >&2
+    exit 1
+  fi
+  echo "coach: building the CLI (first run takes a few minutes)..." >&2
+  (cd "$CLI_DIR" && ./gradlew -q --console=plain installDist) >&2
+  touch "$LAUNCHER"
+fi
+
+exec "$LAUNCHER" "$@"

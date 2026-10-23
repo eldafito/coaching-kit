@@ -1,0 +1,12 @@
+{
+  "name": "coaching-kit",
+  "displayName": "Coaching Kit",
+  "version": "0.1.0",
+  "description": "Endurance coaching assistant for intervals.icu: athlete onboarding, weekly review and planning, workout generation with parser-safe descriptions.",
+  "author": {
+    "name": "eldafito",
+    "url": "https://github.com/eldafito"
+  },
+  "repository": "https://github.com/eldafito/coaching-kit",
+  "keywords": ["coaching", "endurance", "triathlon", "running", "intervals.icu", "training-plan"]
+}
