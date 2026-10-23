@@ -8,5 +8,6 @@
     "url": "https://github.com/eldafito"
   },
   "repository": "https://github.com/eldafito/coaching-kit",
+  "license": "Apache-2.0",
   "keywords": ["coaching", "endurance", "triathlon", "running", "intervals.icu", "training-plan"]
 }

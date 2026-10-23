@@ -70,3 +70,7 @@ set `COACHING_WORKSPACE`). It rebuilds automatically when sources change.
 
 Secret scanning runs on every push (gitleaks, see `.gitleaks.toml`). Locally:
 `pre-commit install`.
+
+## License
+
+[Apache License 2.0](LICENSE)
