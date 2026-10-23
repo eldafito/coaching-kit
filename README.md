@@ -19,7 +19,8 @@ athlete's watch.
 ## Requirements
 
 - [Claude Code](https://code.claude.com)
-- Java 17+ (`java -version`); the CLI builds itself on first use
+- macOS, Linux or Windows (x64 or arm64; Windows is untested): the `coach` CLI
+  is downloaded as a native binary on first use, nothing else to install
 - An intervals.icu account with coach access to your athletes, and its API key
 
 ## Install
@@ -66,7 +67,23 @@ claude plugin validate /path/to/coaching-kit  # check manifest and marketplace
 ```
 
 Run the CLI directly with `bin/coach <command>` from inside a workspace (or
-set `COACHING_WORKSPACE`). It rebuilds automatically when sources change.
+set `COACHING_WORKSPACE`). From a git checkout it builds from source with
+Gradle (Java 17+) and rebuilds when sources change; installed copies download
+the native binary of the matching GitHub release instead.
+
+### Releasing
+
+1. Bump `version` in `.claude-plugin/plugin.json`.
+2. Commit, then tag and push: `git tag v<version> && git push origin v<version>`.
+3. The `release` workflow builds native binaries for macOS, Linux and Windows
+   with GraalVM and publishes them with `SHA256SUMS`. Users get the new version
+   with `claude plugin update coaching-kit@coaching-kit`.
+
+Native-image reflection config lives in
+`cli/src/main/resources/META-INF/native-image/`. If a new feature fails only in
+the native binary, regenerate it by running the JVM build with
+`-agentlib:native-image-agent=config-merge-dir=<that dir>` on the affected
+commands.
 
 Secret scanning runs on every push (gitleaks, see `.gitleaks.toml`). Locally:
 `pre-commit install`.

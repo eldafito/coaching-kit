@@ -55,10 +55,10 @@ Check `.gitignore` contains `coach-credentials.env`, `*.env`,
 
 ## 5. Check the toolchain
 
-1. `java -version` must be 17 or newer. If missing, suggest
-   `brew install openjdk@21` (macOS) or the distribution's JDK package.
-2. Run `coach --help`. The first run builds the CLI (a few minutes).
-3. If the key is configured, run `coach get /athlete/0` to check that
+1. Run `coach --help`. The first run downloads the CLI for this system (a few
+   seconds). If no prebuilt binary is available it falls back to building
+   from source, which needs Java 17+ (`brew install openjdk@21` on macOS).
+2. If the key is configured, run `coach get /athlete/0` to check that
    authentication works (`0` = the key owner's own profile). Report only
    success or the error, never the response content in full.
 

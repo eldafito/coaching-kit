@@ -1,26 +1,93 @@
 #!/usr/bin/env bash
 # Launcher for the coaching-kit CLI. Claude Code puts this plugin's bin/ on PATH,
 # so `coach <command>` works from anywhere inside the coach's workspace.
-# The Kotlin CLI is built on first use (and rebuilt when its sources change).
+#
+# Resolution order:
+#   1. Development checkout (plugin dir is a git repo) or COACH_FROM_SOURCE=1:
+#      build from source with Gradle (rebuilt when sources change).
+#   2. Prebuilt native binary for this platform, downloaded once from the GitHub
+#      release matching the plugin version and verified against SHA256SUMS.
+#   3. Fallback: build from source if Java is available.
 set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_DIR="$PLUGIN_ROOT/cli"
-LAUNCHER="$CLI_DIR/build/install/coach/bin/coach"
+REPO="${COACH_RELEASE_REPO:-eldafito/coaching-kit}"
 
-needs_build() {
-  [[ ! -x "$LAUNCHER" ]] && return 0
-  [[ -n "$(find "$CLI_DIR/src" "$CLI_DIR/build.gradle.kts" -newer "$LAUNCHER" -print -quit)" ]]
+die() { echo "coach: $*" >&2; exit 1; }
+
+plugin_version() {
+  sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$PLUGIN_ROOT/.claude-plugin/plugin.json" | head -1
 }
 
-if needs_build; then
-  if ! command -v java >/dev/null 2>&1; then
-    echo "coach: Java 17+ is required (install a JDK, e.g. 'brew install openjdk@21')." >&2
-    exit 1
+platform() {
+  local os arch
+  case "$(uname -s)" in
+    Darwin) os=darwin ;;
+    Linux) os=linux ;;
+    MINGW* | MSYS* | CYGWIN*) os=windows ;;
+    *) return 1 ;;
+  esac
+  case "$(uname -m)" in
+    arm64 | aarch64) arch=arm64 ;;
+    x86_64 | amd64) arch=x64 ;;
+    *) return 1 ;;
+  esac
+  echo "$os-$arch"
+}
+
+sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+  else shasum -a 256 "$1" | cut -d' ' -f1
   fi
-  echo "coach: building the CLI (first run takes a few minutes)..." >&2
-  (cd "$CLI_DIR" && ./gradlew -q --console=plain installDist) >&2
-  touch "$LAUNCHER"
+}
+
+run_from_source() {
+  local launcher="$CLI_DIR/build/install/coach/bin/coach"
+  if [[ ! -x "$launcher" || -n "$(find "$CLI_DIR/src" "$CLI_DIR/build.gradle.kts" -newer "$launcher" -print -quit)" ]]; then
+    command -v java >/dev/null 2>&1 || die "no prebuilt binary available and Java 17+ is not installed (e.g. 'brew install openjdk@21')."
+    echo "coach: building the CLI from source (first run takes a few minutes)..." >&2
+    (cd "$CLI_DIR" && ./gradlew -q --console=plain installDist) >&2
+    touch "$launcher"
+  fi
+  exec "$launcher" "$@"
+}
+
+# Downloads the release binary into the cache and prints its path.
+fetch_binary() {
+  local version="$1" plat="$2" ext="" cache name base tmp expected actual
+  [[ "$plat" == windows-* ]] && ext=".exe"
+  name="coach-$plat$ext"
+  cache="${XDG_CACHE_HOME:-$HOME/.cache}/coaching-kit/$version"
+  if [[ -x "$cache/$name" ]]; then echo "$cache/$name"; return 0; fi
+
+  command -v curl >/dev/null 2>&1 || return 1
+  base="https://github.com/$REPO/releases/download/v$version"
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  echo "coach: downloading $name v$version..." >&2
+  curl -fsSL "$base/$name" -o "$tmp/$name" || return 1
+  curl -fsSL "$base/SHA256SUMS" -o "$tmp/SHA256SUMS" || return 1
+  expected="$(awk -v n="$name" '$2 == n { print $1 }' "$tmp/SHA256SUMS")"
+  actual="$(sha256 "$tmp/$name")"
+  [[ -n "$expected" && "$expected" == "$actual" ]] || die "checksum mismatch for $name, refusing to run it."
+
+  mkdir -p "$cache"
+  chmod +x "$tmp/$name"
+  mv "$tmp/$name" "$cache/$name"
+  # Keep only the current version in the cache
+  find "$(dirname "$cache")" -mindepth 1 -maxdepth 1 -type d ! -name "$version" -exec rm -rf {} + 2>/dev/null || true
+  echo "$cache/$name"
+}
+
+if [[ -d "$PLUGIN_ROOT/.git" || "${COACH_FROM_SOURCE:-}" == "1" ]]; then
+  run_from_source "$@"
 fi
 
-exec "$LAUNCHER" "$@"
+if plat="$(platform)" && version="$(plugin_version)" && [[ -n "$version" ]] \
+  && bin="$(fetch_binary "$version" "$plat")"; then
+  exec "$bin" "$@"
+fi
+
+echo "coach: prebuilt binary not available for this system, falling back to source build." >&2
+run_from_source "$@"

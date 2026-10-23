@@ -1,7 +1,7 @@
 {
   "name": "coaching-kit",
   "displayName": "Coaching Kit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Endurance coaching assistant for intervals.icu: athlete onboarding, weekly review and planning, workout generation with parser-safe descriptions.",
   "author": {
     "name": "eldafito",
