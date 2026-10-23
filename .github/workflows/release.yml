@@ -52,9 +52,10 @@ jobs:
         run: ./gradlew --no-daemon -q installDist
       - name: Build native binary
         run: |
-          ni=native-image
-          [ "$RUNNER_OS" = Windows ] && ni=native-image.cmd
-          "$ni" -cp "build/install/coach/lib/*" -o "coach-${{ matrix.platform }}" MainKt
+          ni=native-image; sep=":"
+          if [ "$RUNNER_OS" = Windows ]; then ni=native-image.cmd; sep=";"; fi
+          cp=$(ls build/install/coach/lib/*.jar | paste -sd "$sep" -)
+          "$ni" -cp "$cp" -o "coach-${{ matrix.platform }}" MainKt
       - name: Smoke test
         run: |
           bin="./coach-${{ matrix.platform }}"
