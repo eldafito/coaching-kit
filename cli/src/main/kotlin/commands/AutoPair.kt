@@ -5,13 +5,9 @@ import kotlinx.cli.Subcommand
 import kotlinx.cli.default
 import kotlinx.cli.required
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
-import lib.EnvLoader
+import lib.Credentials
 import lib.IntervalsApi
+import lib.Pairing
 import lib.PathResolver
 import java.io.File
 import java.time.LocalDate
@@ -61,83 +57,35 @@ class AutoPair : Subcommand("auto-pair", "Discover unpaired activities and pair 
         println("  mode:  ${if (dryRun) "DRY-RUN" else "LIVE PUT"}")
         println()
 
-        val json = Json { ignoreUnknownKeys = true; isLenient = true }
-        val api = IntervalsApi(EnvLoader.get("INTERVALS_API_KEY"))
+        val api = IntervalsApi(Credentials.requireApiKey())
         try {
-            val actsRaw = api.getRaw(
-                "/api/v1/athlete/$athleteId/activities",
-                mapOf("oldest" to fromDate.toString(), "newest" to toDate.toString())
-            )
-            val evsRaw = api.getEventsRaw(athleteId, fromDate.toString(), toDate.toString())
-
-            val activities = (json.parseToJsonElement(actsRaw) as? JsonArray) ?: JsonArray(emptyList())
-            val events = (json.parseToJsonElement(evsRaw) as? JsonArray) ?: JsonArray(emptyList())
-
-            // Index events by (date, type) for quick lookup. Only WORKOUT category.
-            data class Ev(val id: String, val date: String, val type: String, val name: String)
-            val plannedByKey = mutableMapOf<Pair<String, String>, MutableList<Ev>>()
-            for (e in events) {
-                val obj = e as? JsonObject ?: continue
-                val cat = obj["category"]?.jsonPrimitive?.contentOrNull
-                if (cat != "WORKOUT") continue
-                val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: continue
-                val date = obj["start_date_local"]?.jsonPrimitive?.contentOrNull?.take(10) ?: continue
-                val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: continue
-                val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: ""
-                plannedByKey.getOrPut(date to type) { mutableListOf() }.add(Ev(id, date, type, name))
-            }
-
-            var paired = 0
-            var noMatch = 0
-            var ambiguous = 0
-            var alreadyPaired = 0
-            var failed = 0
-
-            for (a in activities) {
-                val obj = a as? JsonObject ?: continue
-                val actId = obj["id"]?.jsonPrimitive?.contentOrNull ?: continue
-                val date = obj["start_date_local"]?.jsonPrimitive?.contentOrNull?.take(10) ?: continue
-                val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: continue
-                val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: ""
-                val pairedId = obj["paired_event_id"]?.jsonPrimitive?.contentOrNull
-
-                if (pairedId != null && pairedId != "null") {
-                    alreadyPaired++
-                    continue
-                }
-
-                val candidates = plannedByKey[date to type].orEmpty()
-                when (candidates.size) {
-                    0 -> {
-                        println("  · $date  $actId  $type  \"$name\"  → no planned event for this date+type")
-                        noMatch++
-                    }
-                    1 -> {
-                        val ev = candidates.single()
-                        println("  ✎ $date  $actId  $type  \"$name\"  → event ${ev.id}  \"${ev.name}\"")
-                        if (!dryRun) {
-                            try {
-                                api.pairActivity(actId, ev.id)
-                                println("    ✓ paired")
-                                paired++
-                            } catch (e: Exception) {
-                                println("    ✗ FAILED: ${e.message?.take(200)}")
-                                failed++
-                            }
-                        } else {
-                            paired++
+            val results = Pairing.autoPair(api, athleteId, fromDate, toDate, dryRun)
+            for (r in results) {
+                val head = "${r.date}  ${r.activityId}  ${r.type}  \"${r.activityName}\""
+                when (r.outcome) {
+                    Pairing.Outcome.ALREADY_PAIRED -> Unit
+                    Pairing.Outcome.NO_MATCH -> println("  · $head  → no planned event for this date+type")
+                    Pairing.Outcome.PAIRED, Pairing.Outcome.WOULD_PAIR, Pairing.Outcome.FAILED -> {
+                        println("  ✎ $head  → event ${r.event?.id}  \"${r.event?.name}\"")
+                        when (r.outcome) {
+                            Pairing.Outcome.PAIRED -> println("    ✓ paired")
+                            Pairing.Outcome.FAILED -> println("    ✗ FAILED: ${r.error}")
+                            else -> Unit
                         }
                     }
-                    else -> {
-                        println("  ? $date  $actId  $type  \"$name\"  → ${candidates.size} candidates, skipping (use 'pair' manually):")
-                        candidates.forEach { println("       - ${it.id}  \"${it.name}\"") }
-                        ambiguous++
+                    Pairing.Outcome.AMBIGUOUS -> {
+                        println("  ? $head  → ${r.candidates.size} candidates, skipping (use 'pair' manually):")
+                        r.candidates.forEach { println("       - ${it.id}  \"${it.name}\"") }
                     }
                 }
             }
-
+            val count = { o: Pairing.Outcome -> results.count { it.outcome == o } }
+            val paired = count(Pairing.Outcome.PAIRED) + count(Pairing.Outcome.WOULD_PAIR)
             println()
-            println("Summary: $paired paired${if (dryRun) " (dry-run)" else ""}, $alreadyPaired already paired, $noMatch no match, $ambiguous ambiguous, $failed failed")
+            println(
+                "Summary: $paired paired${if (dryRun) " (dry-run)" else ""}, ${count(Pairing.Outcome.ALREADY_PAIRED)} already paired, " +
+                    "${count(Pairing.Outcome.NO_MATCH)} no match, ${count(Pairing.Outcome.AMBIGUOUS)} ambiguous, ${count(Pairing.Outcome.FAILED)} failed"
+            )
         } finally {
             api.close()
         }

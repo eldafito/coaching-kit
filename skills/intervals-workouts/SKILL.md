@@ -1,6 +1,6 @@
 ---
 name: intervals-workouts
-description: Rules for writing, uploading and verifying structured workouts on intervals.icu (week-N.json files, workout descriptions, step syntax, parser pitfalls, Garmin export). Use whenever creating or editing a workout JSON file, a workout description, or before running `coach generate` / `coach update`.
+description: Rules for writing, uploading and verifying structured workouts on intervals.icu (week-N.json files, workout descriptions, step syntax, parser pitfalls, Garmin export). Use whenever creating or editing a workout, a workout description, or before calling propose_week, upload_week or update_workouts.
 ---
 
 # Writing workouts for intervals.icu
@@ -33,8 +33,8 @@ A JSON array of workouts:
 - `moving_time` in seconds; it must match the sum of the structured steps
   (see "Verification").
 - Omit `icu_training_load` unless the server estimate is clearly wrong.
-- After `coach generate`, copy each created event ID into the workout as
-  `"intervals_event_id": "<id>"`. `coach update` only touches workouts that
+- After `upload_week`, copy each created event ID into the workout as
+  `"intervals_event_id": "<id>"`. `update_workouts` only works on workouts that
   carry it.
 
 ## Description structure
@@ -90,39 +90,47 @@ intervals.icu parses **every line** of the description, prose included.
 
 Never upload without the coach's explicit OK (see the workspace `CLAUDE.md`).
 
-```bash
-coach generate --athlete <name> --plan <plan> --file week-N.json --dry-run   # inspect payloads
-coach generate --athlete <name> --plan <plan> --file week-N.json             # after OK
-coach update   --athlete <name> --plan <plan> --file week-N.json             # push edits to existing events
-coach get /athlete/<athleteId>/events/<eventId>                              # verify one event
-```
+1. `propose_week` — checks new workouts against the parser rules above and
+   saves a draft. Blocking problems (prose numbers with units, `- ` prose
+   lines, missing `---`, bad dates or types) must be fixed before a draft
+   exists. Warnings (bpm ranges in steps, steps without a target) need a look.
+2. Present the week to the coach and wait for the OK.
+3. `upload_week` with the draft ID and `coach_approved=true`. It creates the
+   events and verifies each one.
+4. Edits to existing workouts: `update_workouts` (with `intervals_event_id`,
+   after the coach's OK). Visibility is preserved; change it with
+   `set_visibility`.
+5. `verify_event` re-checks one workout at any time.
 
-Check each created or updated event:
+The verification checks each event for:
 
 - `type` and `hide_from_athlete` as intended;
-- `workout_doc.steps`: expected count, every `text` is one of your cues;
-- `moving_time` close to the planned value.
+- parsed steps: expected count, every step text is one of your cues;
+- `moving_time` close to the parsed steps.
 
 Red flags and fix:
 
 - `moving_time` 10-20x too large, or a single non-repeat step over 10000 s:
   the parser ate a prose duration such as `200m`.
-- A step `text` that is a prose fragment: a `- ` line or a `<number><unit>`
-  pattern below the `---`.
-- Fix: spell out the offending prose, `coach update`, verify again.
+- A step text that is a prose fragment, or an empty step: a `- ` line or a
+  `<number><unit>` pattern below the `---`.
+- Fix: spell out the offending prose, `update_workouts`, verify again.
 
-## API access
+## Data access
 
-Use only the `coach` CLI. It reads the API key itself.
+Use only the Coaching Kit tools: they read the intervals.icu API key
+themselves.
 
-- **Never** write the API key in a command, a file you create, or a `curl`
-  call. Commands with a literal key get saved in tool permissions and shell
-  history.
-- Reads: `coach get <path>`. Examples:
-  `/athlete/<id>/activities?oldest=YYYY-MM-DD&newest=YYYY-MM-DD`,
-  `/athlete/<id>/wellness?oldest=...&newest=...`, `/activity/<activityId>/intervals`.
-- One-off writes (e.g. thresholds after a test): write the JSON body to a temp
-  file, then `coach put /athlete/<id>/sport-settings/<settingsId> --body-file <file>`.
+- **Never** ask for, write or repeat the API key, and never call the
+  intervals.icu API with `curl` or similar. If the connection is missing or
+  rejected, call `connect_intervals`.
+- Reads: `get_activities`, `get_activity_intervals`, `get_wellness`,
+  `get_events`, `athlete_overview`.
+- Thresholds after a test: `update_sport_settings` (sport settings IDs are in
+  `athlete_overview`), after the coach's OK; record the change in
+  `tests-history.md`.
 - **Pairing**: intervals.icu does not auto-pair executed activities with
-  planned events. Use `coach auto-pair --athlete <name>` (date + type match)
-  or `coach pair --athlete <name> --activity-id <a> --event-id <e>`.
+  planned events. Use `pair_activities` (date + sport match) or
+  `pair_activity` for a specific pair.
+- In Claude Code, the same operations are also available from the `coach` CLI
+  (`"${CLAUDE_PLUGIN_ROOT}/scripts/coach" --help`) for advanced use.

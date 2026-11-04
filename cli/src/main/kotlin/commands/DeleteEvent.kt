@@ -12,7 +12,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.add
-import lib.EnvLoader
+import lib.Credentials
 import lib.IntervalsApi
 import lib.PathResolver
 import java.io.File
@@ -50,7 +50,7 @@ class DeleteEvent : Subcommand("delete", "Delete an intervals.icu event by ID an
         println("Deleting event $eventId for $athleteName ($athleteId)")
         println("  mode: ${if (dryRun) "DRY-RUN" else "LIVE DELETE"}")
 
-        val api = IntervalsApi(EnvLoader.get("INTERVALS_API_KEY"))
+        val api = IntervalsApi(Credentials.requireApiKey())
         try {
             if (dryRun) {
                 println("  [dry-run] would DELETE /api/v1/athlete/$athleteId/events/$eventId")

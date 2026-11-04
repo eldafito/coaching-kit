@@ -9,11 +9,12 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import lib.EnvLoader
+import lib.Credentials
 import lib.IntervalsApi
 import lib.PathResolver
+import lib.WorkoutDef
+import lib.WorkoutOps
 import java.io.File
 
 /**
@@ -83,7 +84,7 @@ class UpdateWorkouts : Subcommand("update", "Push edited workout content to exis
         println("  mode:   ${if (dryRun) "DRY-RUN" else "LIVE PUT"}")
         println()
 
-        val api = IntervalsApi(EnvLoader.get("INTERVALS_API_KEY"))
+        val api = IntervalsApi(Credentials.requireApiKey())
         var ok = 0; var fail = 0; var skipped = 0
         try {
             for (w in source) {
@@ -135,32 +136,10 @@ class UpdateWorkouts : Subcommand("update", "Push edited workout content to exis
         // on a previously unhidden workout must NOT silently re-hide it. The source
         // JSON's hide_from_athlete is treated as the initial value at creation time,
         // not as a recurring setter. Use 'unhide' / a future 'hide' command to flip.
-        val currentHidden: Boolean? = if (dryRun) {
-            null
-        } else {
-            try {
-                val raw = api.getRaw("/api/v1/athlete/$athleteId/events/$eventId")
-                val obj = kotlinx.serialization.json.Json.parseToJsonElement(raw) as? JsonObject
-                obj?.get("hide_from_athlete")?.jsonPrimitive?.booleanOrNull
-            } catch (e: Exception) {
-                println("    ⚠ could not GET current visibility: ${e.message?.take(120)} — falling back to source value")
-                null
-            }
+        val currentHidden = if (dryRun) null else WorkoutOps.currentHidden(api, athleteId, eventId).also {
+            if (it == null) println("    ⚠ could not GET current visibility — falling back to source value")
         }
-        val hideValue = currentHidden ?: w.hide_from_athlete
-
-        // Use kotlinx.serialization to safely escape strings.
-        val obj = kotlinx.serialization.json.buildJsonObject {
-            put("name", kotlinx.serialization.json.JsonPrimitive(w.name))
-            put("type", kotlinx.serialization.json.JsonPrimitive(w.type))
-            put("description", kotlinx.serialization.json.JsonPrimitive(w.description))
-            put("start_date_local", kotlinx.serialization.json.JsonPrimitive(w.start_date_local))
-            put("moving_time", kotlinx.serialization.json.JsonPrimitive(w.moving_time))
-            w.icu_training_load?.let { put("icu_training_load", kotlinx.serialization.json.JsonPrimitive(it)) }
-            put("hide_from_athlete", kotlinx.serialization.json.JsonPrimitive(hideValue))
-            put("category", kotlinx.serialization.json.JsonPrimitive(w.category))
-        }
-        return obj.toString()
+        return WorkoutOps.updatePayload(w, currentHidden ?: w.hide_from_athlete)
     }
 
     private fun extractAthleteId(profileFile: File): String {

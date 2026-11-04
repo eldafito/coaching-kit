@@ -33,8 +33,9 @@ the plugin's `intervals-workouts` skill.
 - Always include **expected RPE** (1–10)
 - Always close the description with a **Feedback** section of 2-4 questions
 - **No name prefix** — descriptive names only (e.g. `Bike Endurance + Tempo 75'`)
-- **Visibility**: `hide_from_athlete: false` (visible) unless you prefer to
-  upload hidden and unlock weekly with `coach unhide`
+- **Visibility**: `hide_from_athlete: true` — workouts are uploaded hidden;
+  the coach checks them on intervals.icu, then asks Claude to make them
+  visible. Switch to `false` (visible right away) once you trust the flow
 - **Athlete-facing text**: plain ASCII (no accented letters) in workout names
   and descriptions
 - **Easy and long runs**: explicit HR ceiling ("hard ceiling X bpm") in prose;
@@ -104,6 +105,6 @@ Loading pattern: 3 load + 1 deload (Base), 2 load + 1 deload (Build).
 
 ## Review cadence
 
-- Weekly review with `/coaching-kit:weekly`, recorded in the plan's decisions log
+- Weekly review with the `weekly` skill, recorded in the plan's decisions log
 - Mesocycle summary at the end of each block
 - On-demand modifications anytime
