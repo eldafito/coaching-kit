@@ -1,8 +1,10 @@
 import commands.ApiGet
 import commands.ApiPut
 import commands.AutoPair
+import commands.ConnectCommand
 import commands.DeleteEvent
 import commands.GenerateWorkouts
+import commands.McpCommand
 import commands.PairActivity
 import commands.SyncAthleteData
 import commands.UnhideWeek
@@ -20,7 +22,9 @@ fun main(args: Array<String>) {
         PairActivity(),
         AutoPair(),
         ApiGet(),
-        ApiPut()
+        ApiPut(),
+        ConnectCommand(),
+        McpCommand()
     )
     parser.parse(if (args.isEmpty()) arrayOf("--help") else args)
 }

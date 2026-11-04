@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Launcher for the coaching-kit CLI. Claude Code puts this plugin's bin/ on PATH,
-# so `coach <command>` works from anywhere inside the coach's workspace.
+# Launcher for the coaching-kit CLI and MCP server. The plugin starts it as
+# `scripts/coach mcp` (see .mcp.json); it can also be run by hand, e.g.
+# `"$CLAUDE_PLUGIN_ROOT/scripts/coach" sync --athlete anna`.
+# (It is not in a top-level bin/ directory: Cowork refuses plugins that have one.)
 #
 # Resolution order:
-#   1. Development checkout (plugin dir is a git repo) or COACH_FROM_SOURCE=1:
+#   1. Development checkout (plugin dir is a git repo, Java installed) or COACH_FROM_SOURCE=1:
 #      build from source with Gradle (rebuilt when sources change).
 #   2. Prebuilt native binary for this platform, downloaded once from the GitHub
 #      release matching the plugin version and verified against SHA256SUMS.
@@ -44,7 +46,7 @@ sha256() {
 
 run_from_source() {
   local launcher="$CLI_DIR/build/install/coach/bin/coach"
-  if [[ ! -x "$launcher" || -n "$(find "$CLI_DIR/src" "$CLI_DIR/build.gradle.kts" -newer "$launcher" -print -quit)" ]]; then
+  if [[ ! -x "$launcher" || -n "$(find "$CLI_DIR/src" "$CLI_DIR/build.gradle.kts" "$PLUGIN_ROOT/.claude-plugin/plugin.json" -newer "$launcher" -print -quit)" ]]; then
     command -v java >/dev/null 2>&1 || die "no prebuilt binary available and Java 17+ is not installed (e.g. 'brew install openjdk@21')."
     echo "coach: building the CLI from source (first run takes a few minutes)..." >&2
     (cd "$CLI_DIR" && ./gradlew -q --console=plain installDist) >&2
@@ -80,7 +82,9 @@ fetch_binary() {
   echo "$cache/$name"
 }
 
-if [[ -d "$PLUGIN_ROOT/.git" || "${COACH_FROM_SOURCE:-}" == "1" ]]; then
+# A git checkout builds from source, but only where Java is available: an installed
+# copy that happens to carry a .git directory still gets the prebuilt binary.
+if [[ "${COACH_FROM_SOURCE:-}" == "1" ]] || { [[ -d "$PLUGIN_ROOT/.git" ]] && command -v java >/dev/null 2>&1; }; then
   run_from_source "$@"
 fi
 

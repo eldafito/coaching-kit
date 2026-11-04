@@ -5,11 +5,14 @@ import kotlinx.cli.Subcommand
 import kotlinx.cli.default
 import kotlinx.cli.required
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import lib.EnvLoader
+import lib.Credentials
+import lib.GeneratedWorkout
 import lib.IntervalsApi
+import lib.IntervalsEventPayload
 import lib.PathResolver
+import lib.WorkoutDef
+import lib.WorkoutOps
 import java.io.File
 
 /**
@@ -72,7 +75,7 @@ class GenerateWorkouts : Subcommand("generate", "POST workouts to intervals.icu 
         println("Mode: ${if (dryRun) "DRY-RUN (no POST)" else "LIVE POST"}")
         println()
 
-        val api = IntervalsApi(EnvLoader.get("INTERVALS_API_KEY"))
+        val api = IntervalsApi(Credentials.requireApiKey())
         val results = mutableListOf<GeneratedWorkout>()
         val unlogged = mutableListOf<GeneratedWorkout>()
         val logFile = File(planDir, "workouts-generated.json")
@@ -92,19 +95,8 @@ class GenerateWorkouts : Subcommand("generate", "POST workouts to intervals.icu 
                     println(payloadJson.prependIndent("    "))
                 } else {
                     try {
-                        val response = api.postJson("/api/v1/athlete/$athleteId/events", payloadJson)
-                        val createdId = parseCreatedId(response)
-                        // intervals.icu sometimes ignores hide_from_athlete and moving_time on POST.
-                        // Patch immediately via PUT to enforce them.
+                        val createdId = WorkoutOps.create(api, athleteId, w)
                         if (createdId != null) {
-                            val patchPayload = buildString {
-                                append("{")
-                                append("\"hide_from_athlete\":${w.hide_from_athlete},")
-                                append("\"moving_time\":${w.moving_time}")
-                                w.icu_training_load?.let { append(",\"icu_training_load\":$it") }
-                                append("}")
-                            }
-                            api.putJson("/api/v1/athlete/$athleteId/events/$createdId", patchPayload)
                             println("    ✓ created id=$createdId (patched hidden=${w.hide_from_athlete}, moving_time=${w.moving_time})")
                         } else {
                             println("    ✓ created (no id parsed)")
@@ -167,21 +159,6 @@ class GenerateWorkouts : Subcommand("generate", "POST workouts to intervals.icu 
         false
     }
 
-    private fun parseCreatedId(response: String): String? {
-        // intervals.icu returns either an object {id:...} or an array of one event
-        return try {
-            val element = Json.parseToJsonElement(response)
-            val obj = if (element is kotlinx.serialization.json.JsonArray) element.firstOrNull() else element
-            obj?.let {
-                (it as? kotlinx.serialization.json.JsonObject)
-                    ?.get("id")
-                    ?.let { v -> (v as? kotlinx.serialization.json.JsonPrimitive)?.content }
-            }
-        } catch (_: Exception) {
-            null
-        }
-    }
-
     private fun extractAthleteId(profileFile: File): String {
         val regex = Regex("Athlete ID:\\s*`?([A-Za-z0-9]+)`?")
         for (line in profileFile.readLines()) {
@@ -190,62 +167,3 @@ class GenerateWorkouts : Subcommand("generate", "POST workouts to intervals.icu 
         error("Could not parse 'Athlete ID' from ${profileFile.name}")
     }
 }
-
-/**
- * Definition of a workout as loaded from the planner JSON.
- * Maps directly to the intervals.icu event payload but with friendlier defaults.
- */
-@Serializable
-data class WorkoutDef(
-    val start_date_local: String,         // "2026-04-28T19:00:00"
-    val name: String,
-    val type: String,                     // Ride | Run | Swim | WeightTraining | Other
-    val description: String,
-    val moving_time: Int,                 // seconds
-    val icu_training_load: Int? = null,
-    val hide_from_athlete: Boolean = true,
-    val category: String = "WORKOUT",
-    val workout_doc: String? = null,      // optional structured steps doc
-    val intervals_event_id: String? = null  // optional: explicit event ID, used by 'update' for date-changing PUTs
-) {
-    fun toPayload() = IntervalsEventPayload(
-        start_date_local = start_date_local,
-        category = category,
-        name = name,
-        type = type,
-        description = description,
-        moving_time = moving_time,
-        icu_training_load = icu_training_load,
-        hide_from_athlete = hide_from_athlete,
-        not_on_fitness_chart = false,
-        show_as_note = false
-    )
-}
-
-@Serializable
-data class IntervalsEventPayload(
-    val start_date_local: String,
-    val category: String,
-    val name: String,
-    val type: String,
-    val description: String,
-    val moving_time: Int,
-    val icu_training_load: Int? = null,
-    val hide_from_athlete: Boolean = true,
-    val not_on_fitness_chart: Boolean = false,
-    val show_as_note: Boolean = false
-)
-
-@Serializable
-data class GeneratedWorkout(
-    // Nullable: entries added by hand (or by other tools) may carry a null index.
-    // A non-nullable Int here makes the whole log unreadable and takes 'generate' down
-    // AFTER the events have already been created on intervals.icu.
-    val local_index: Int? = null,
-    val name: String,
-    val start_date_local: String,
-    val category: String = "WORKOUT",
-    val type: String,
-    val intervals_event_id: String?,
-    val hide_from_athlete: Boolean = false
-)

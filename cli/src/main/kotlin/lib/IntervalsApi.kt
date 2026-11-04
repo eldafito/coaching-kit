@@ -55,7 +55,7 @@ class IntervalsApi(
             accept(ContentType.Application.Json)
         }
         if (!response.status.isSuccess()) {
-            error("GET $path failed: ${response.status}")
+            throw IntervalsApiException("GET", path, response.status.value, response.status.toString(), "")
         }
         return response.body()
     }
@@ -69,7 +69,7 @@ class IntervalsApi(
             accept(ContentType.Application.Json)
         }
         if (!response.status.isSuccess()) {
-            error("GET $path failed: ${response.status} — ${response.bodyAsText().take(500)}")
+            throw IntervalsApiException("GET", path, response.status.value, response.status.toString(), response.bodyAsText().take(500))
         }
         return response.bodyAsText()
     }
@@ -80,7 +80,7 @@ class IntervalsApi(
             setBody(body)
         }
         if (!response.status.isSuccess()) {
-            error("POST $path failed: ${response.status} — ${response.bodyAsText().take(500)}")
+            throw IntervalsApiException("POST", path, response.status.value, response.status.toString(), response.bodyAsText().take(500))
         }
         return response.bodyAsText()
     }
@@ -91,7 +91,7 @@ class IntervalsApi(
             setBody(body)
         }
         if (!response.status.isSuccess()) {
-            error("PUT $path failed: ${response.status} — ${response.bodyAsText().take(500)}")
+            throw IntervalsApiException("PUT", path, response.status.value, response.status.toString(), response.bodyAsText().take(500))
         }
         return response.bodyAsText()
     }
@@ -99,7 +99,7 @@ class IntervalsApi(
     suspend fun delete(path: String): String {
         val response: HttpResponse = client.delete("$baseUrl$path")
         if (!response.status.isSuccess()) {
-            error("DELETE $path failed: ${response.status} — ${response.bodyAsText().take(500)}")
+            throw IntervalsApiException("DELETE", path, response.status.value, response.status.toString(), response.bodyAsText().take(500))
         }
         return response.bodyAsText()
     }
@@ -142,3 +142,17 @@ class IntervalsApi(
     suspend fun pairActivity(activityId: String, eventId: String): String =
         putJson("/api/v1/activity/$activityId", "{\"paired_event_id\":$eventId}")
 }
+
+/**
+ * A non-2xx answer from intervals.icu. The message keeps the historical
+ * "<METHOD> <path> failed: <status> — <body>" format printed by the CLI.
+ */
+class IntervalsApiException(
+    val method: String,
+    val path: String,
+    val status: Int,
+    statusText: String,
+    val body: String
+) : IllegalStateException(
+    "$method $path failed: $statusText" + if (body.isNotBlank()) " — $body" else ""
+)

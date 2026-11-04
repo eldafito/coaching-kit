@@ -4,7 +4,7 @@ import kotlinx.cli.ArgType
 import kotlinx.cli.Subcommand
 import kotlinx.cli.required
 import kotlinx.coroutines.runBlocking
-import lib.EnvLoader
+import lib.Credentials
 import lib.IntervalsApi
 import java.io.File
 
@@ -26,7 +26,7 @@ class ApiGet : Subcommand("get", "GET an intervals.icu API path and print the ra
     )
 
     override fun execute() = runBlocking {
-        val api = IntervalsApi(EnvLoader.get("INTERVALS_API_KEY"))
+        val api = IntervalsApi(Credentials.requireApiKey())
         try {
             println(api.getRaw(normalizeApiPath(path)))
         } finally {
@@ -50,7 +50,7 @@ class ApiPut : Subcommand("put", "PUT a JSON body to an intervals.icu API path a
 
     override fun execute() = runBlocking {
         val body = File(bodyFile).also { require(it.exists()) { "Body file not found: ${it.absolutePath}" } }.readText()
-        val api = IntervalsApi(EnvLoader.get("INTERVALS_API_KEY"))
+        val api = IntervalsApi(Credentials.requireApiKey())
         try {
             println(api.putJson(normalizeApiPath(path), body))
         } finally {

@@ -5,7 +5,7 @@ import kotlinx.cli.Subcommand
 import kotlinx.cli.default
 import kotlinx.cli.required
 import kotlinx.coroutines.runBlocking
-import lib.EnvLoader
+import lib.Credentials
 import lib.IntervalsApi
 
 /**
@@ -45,7 +45,7 @@ class PairActivity : Subcommand("pair", "Pair an activity with a planned event (
             return@runBlocking
         }
 
-        val api = IntervalsApi(EnvLoader.get("INTERVALS_API_KEY"))
+        val api = IntervalsApi(Credentials.requireApiKey())
         try {
             api.pairActivity(activityId, eventId)
             println("  ✓ paired")

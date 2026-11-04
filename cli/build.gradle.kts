@@ -5,7 +5,31 @@ plugins {
 }
 
 group = "coaching"
-version = "0.1.0"
+
+// Single source of truth for the version: the plugin manifest.
+val pluginVersion: String = Regex("\"version\"\\s*:\\s*\"([^\"]+)\"")
+    .find(rootDir.resolve("../.claude-plugin/plugin.json").readText())
+    ?.groupValues?.get(1)
+    ?: "0.0.0-dev"
+version = pluginVersion
+
+val generatedSrc = layout.buildDirectory.dir("generated/buildinfo")
+
+val generateBuildInfo by tasks.registering {
+    val out = generatedSrc
+    val v = pluginVersion
+    inputs.property("version", v)
+    outputs.dir(out)
+    doLast {
+        val file = out.get().file("lib/BuildInfo.kt").asFile
+        file.parentFile.mkdirs()
+        file.writeText("package lib\n\nobject BuildInfo {\n    const val VERSION = \"$v\"\n}\n")
+    }
+}
+
+tasks.named("compileKotlin") {
+    dependsOn(generateBuildInfo)
+}
 
 repositories {
     mavenCentral()
@@ -46,6 +70,9 @@ java {
 }
 
 kotlin {
+    sourceSets.named("main") {
+        kotlin.srcDir(generatedSrc)
+    }
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }

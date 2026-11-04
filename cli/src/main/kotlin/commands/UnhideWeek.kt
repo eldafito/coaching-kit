@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import lib.EnvLoader
+import lib.Credentials
 import lib.IntervalsApi
 import lib.PathResolver
 import java.io.File
@@ -83,7 +83,7 @@ class UnhideWeek : Subcommand("unhide", "Unlock workouts for the athlete (set hi
         }
         println("Found ${toUnhide.size} workouts to unhide.")
 
-        val api = IntervalsApi(EnvLoader.get("INTERVALS_API_KEY"))
+        val api = IntervalsApi(Credentials.requireApiKey())
         try {
             for ((id, name) in toUnhide) {
                 try {
